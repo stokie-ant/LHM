@@ -1,24 +1,37 @@
-﻿// TODO: Sort out why it sometimes excepts on start
+﻿/*
+ * LCD Smartie plugin to interact with Libre Hardware Monitor library
+ * 
+ * Copyright (C) 2022  Stokie-Ant
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 using LibreHardwareMonitor.Hardware;
 using System;
 using System.Linq;
 using System.IO;
 using System.Security.Principal;
+using System.Threading;
 
 namespace LHM
 {
     public class LCDSmartie
     {
-        bool isopen = false;
-        static bool IsElevated
-        {
-            get
-            {
-                var id = WindowsIdentity.GetCurrent();
-                return id.Owner != id.User;
-            }
-        }
+        bool started = false;
+        bool broken = false;
+        bool isAdmin = false;
+        string emessage;
 
         public class UpdateVisitor : IVisitor
         {
@@ -48,90 +61,101 @@ namespace LHM
             IsPsuEnabled = true,
         };
 
-        private bool init()
+        public void ThreadLoop ()
         {
-            if (!IsElevated)
-                return false;
-
             try
             {
                 computer.Open();
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                return false;
+                broken = true;
+                emessage = e.ToString();
+                return;
             }
 
-            isopen = true;
+            started = true;
             computer.Accept(new UpdateVisitor());
 
             if (!File.Exists("plugins\\LHMreport.txt"))
                 GenerateReport();
-            return true;
 
+            while (true)
+                foreach (IHardware hardware in computer.Hardware)
+                {
+                    hardware.Update();
+                    Thread.Sleep(100);
+                }
         }
 
         public LCDSmartie()
         {
-            init();
+            var id = WindowsIdentity.GetCurrent();
+            if (id.Owner == id.User)
+                return;
+
+            isAdmin = true;
+
+            // we run open() and update() in a thread so smartie doesn't soft lock waiting for the library
+            Thread loop = new Thread(new ThreadStart(ThreadLoop));
+            loop.Start();
         }
 
         // Gets names
         public string function1(string param1, string param2)
         {
-            if (!IsElevated)
+            if (!isAdmin)
                 return "Plugin needs administrator privileges";
 
-            if (!isopen)
-                if (!init())
-                    return "Can't init library";
+            if (broken)
+                return emessage;
+
+            if (!started)
+                return "waiting for data";
 
             string[] p = param1.Split('#');
                  int pcount = param1.Split('#').Count();
                  if (pcount == 1)
                  {
-                     computer.Hardware[Convert.ToInt32(p[0])].Update();
                      return computer.Hardware[Convert.ToInt32(p[0])].Name;
                  }
                  if (pcount == 2)
                  {
-                     computer.Hardware[Convert.ToInt32(p[0])].Update();
                      return computer.Hardware[Convert.ToInt32(p[0])].Sensors[Convert.ToInt32(p[1])].Name;
                  }
                  if (pcount == 3)
                  {
-                     computer.Hardware[Convert.ToInt32(p[0])].Update();
                      return computer.Hardware[Convert.ToInt32(p[0])].SubHardware[Convert.ToInt32(p[1])].Sensors[Convert.ToInt32(p[2])].Name;
                  }
 
             return "wrong number of parameters";
 
         }
+
         // gets subhw names
         public string function2(string param1, string param2)
         {
-            if (!IsElevated)
+            if (!isAdmin)
                 return "Plugin needs administrator privileges";
 
-            if (!isopen)
-                if (!init())
-                    return "Can't init library";
+            if (broken)
+                return emessage;
+
+            if (!started)
+                return "waiting for data";
 
             string[] p = param1.Split('#');
             int pcount = param1.Split('#').Count();
             if (pcount == 1)
             {
-                computer.Hardware[Convert.ToInt32(p[0])].Update();
                 return computer.Hardware[Convert.ToInt32(p[0])].Name;
             }
             if (pcount == 2)
             {
-                computer.Hardware[Convert.ToInt32(p[0])].Update();
                 return computer.Hardware[Convert.ToInt32(p[0])].SubHardware[Convert.ToInt32(p[1])].Name;
             }
             if (pcount == 3)
             {
-                computer.Hardware[Convert.ToInt32(p[0])].Update();
                 return computer.Hardware[Convert.ToInt32(p[0])].SubHardware[Convert.ToInt32(p[1])].SubHardware[Convert.ToInt32(p[2])].Name;
             }
 
@@ -142,24 +166,24 @@ namespace LHM
         // Gets values
         public string function3(string param1, string param2)
         {
-            if (!IsElevated)
+            if (!isAdmin)
                 return "Plugin needs administrator privileges";
 
-            if (!isopen)
-                if (!init())
-                    return "Can't init library";
+            if (broken)
+                return emessage;
+
+            if (!started)
+                return "waiting for data";
 
             string result;
             string[] p = param1.Split('#');
             int pcount = param1.Split('#').Count();
             if (pcount == 2)
             {
-                computer.Hardware[Convert.ToInt32(p[0])].Update();
                 result = computer.Hardware[Convert.ToInt32(p[0])].Sensors[Convert.ToInt32(p[1])].Value.ToString();
             }
             else if (pcount == 3)
             {
-                computer.Hardware[Convert.ToInt32(p[0])].Update();
                 result = computer.Hardware[Convert.ToInt32(p[0])].SubHardware[Convert.ToInt32(p[1])].Sensors[Convert.ToInt32(p[2])].Value.ToString();
             }
             else
@@ -194,6 +218,7 @@ namespace LHM
             return result;
 
         }
+
         private void GenerateReport()
         {
             string string1 = "Name";
@@ -242,6 +267,6 @@ namespace LHM
             File.WriteAllText("plugins\\LHMreport.txt", string1);
         }
 
-        public int GetMinRefreshInterval() => 1000;
+        public int GetMinRefreshInterval() => 300;
     }
 }
