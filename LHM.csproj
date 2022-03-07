@@ -64,6 +64,9 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="HidSharp">
+      <HintPath>.\HidSharp.dll</HintPath>
+    </Reference>
     <Reference Include="LibreHardwareMonitorLib, Version=0.8.9.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>.\LibreHardwareMonitorLib.dll</HintPath>
