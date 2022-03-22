@@ -28,10 +28,10 @@ namespace LHM
 {
     public class LCDSmartie
     {
-        bool started = false;
-        bool broken = false;
-        bool isAdmin = false;
-        string emessage;
+        static bool started = false;
+        static bool broken = false;
+        static bool isAdmin = false;
+        static string emessage;
 
         public class UpdateVisitor : IVisitor
         {
@@ -51,7 +51,7 @@ namespace LHM
         readonly Computer computer = new Computer
         {
             IsCpuEnabled = true,
-            IsGpuEnabled = true,
+            IsGpuEnabled = false,
             IsMemoryEnabled = true,
             IsMotherboardEnabled = true,
             IsControllerEnabled = true,
@@ -63,6 +63,9 @@ namespace LHM
 
         public void ThreadLoop ()
         {
+            if (!File.Exists("plugins\\LHMDisableGPU.txt"))
+                computer.IsGpuEnabled = true;
+
             try
             {
                 computer.Open();
@@ -211,7 +214,7 @@ namespace LHM
 
             if (pcount == 3)// operator#operand#decimal.round
             {
-                resout = Decimal.Round(resout, Convert.ToInt32(p[2]));
+                resout = decimal.Round(resout, Convert.ToInt32(p[2]));
                 result = resout.ToString();
             }
         
